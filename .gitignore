@@ -1,0 +1,16 @@
+# Compiled binaries
+db
+test
+
+# Debug symbols
+*.dSYM/
+
+# Database files
+*.db
+
+# Object files
+*.o
+*.obj
+
+# macOS
+.DS_Store
