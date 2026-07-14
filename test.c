@@ -1,8 +1,62 @@
+#include <unistd.h>
 #include "Unity/src/unity.h"
 #include "db.h"
 
 void setUp(void) {};
 void tearDown(void) {};
+
+
+static char** capture_stdout_lines(void (*action)(void*), void* arg, int* out_line_count) {
+    char temp_path[] = "/tmp/db_test_stdout_XXXXXX";
+    int temp_fd = mkstemp(temp_path);
+    TEST_ASSERT_TRUE(temp_fd != -1);
+
+    fflush(stdout);
+    int saved_stdout_fd = dup(STDOUT_FILENO);
+    TEST_ASSERT_TRUE(saved_stdout_fd != -1);
+
+    TEST_ASSERT_TRUE(dup2(temp_fd, STDOUT_FILENO) != -1);
+    close(temp_fd);
+
+    action(arg);
+
+    fflush(stdout);
+
+    // Restore stdout so Unity's own output (and later tests) keep working.
+    dup2(saved_stdout_fd, STDOUT_FILENO);
+    close(saved_stdout_fd);
+
+    FILE* capture_fp = fopen(temp_path, "r");
+    TEST_ASSERT_NOT_NULL(capture_fp);
+
+    char** lines = NULL;
+    int line_count = 0;
+    char line_buf[1024];
+
+    while (fgets(line_buf, sizeof(line_buf), capture_fp) != NULL) {
+        size_t len = strlen(line_buf);
+        if (len > 0 && line_buf[len - 1] == '\n') {
+            line_buf[len - 1] = '\0';
+        }
+
+        lines = (char**)realloc(lines, sizeof(char*) * (line_count + 1));
+        lines[line_count] = strdup(line_buf);
+        line_count++;
+    }
+
+    fclose(capture_fp);
+    remove(temp_path);
+
+    *out_line_count = line_count;
+    return lines;
+};
+
+static void free_captured_lines(char** lines, int line_count) {
+    for (int i = 0; i < line_count; i++) {
+        free(lines[i]);
+    }
+    free(lines);
+};
 
 void test_row_id(void) {
     Row row = {1, "hashim", "test@example.com"};
@@ -147,14 +201,19 @@ void test_negative_id(void) {
 };
 
 void test_table_full(void) {
-    Table* table = new_table();
+    char db_path[] = "/tmp/db_test_table_full_XXXXXX";
+    int fd = mkstemp(db_path);
+    TEST_ASSERT_TRUE(fd != -1);
+    close(fd);
+
+    Table* table = db_open(db_path);
 
     Statement statement;
     statement.type = STATEMENT_INSERT;
 
     ExecuteResult result = EXECUTE_SUCCESS;
 
-    for (int i = 0; i < TABLE_MAX_ROWS + 1; i++) {
+    for (int i = 0; i < LEAF_NODE_MAX_CELLS + 1; i++) {
         statement.row_to_insert.id = i;
 
         strcpy(
@@ -176,7 +235,98 @@ void test_table_full(void) {
         result
     );
 
-    free_table(table);
+    db_close(table);
+    remove(db_path);
+};
+
+static void run_constants_command(void* arg) {
+    (void)arg;
+    printf("Constants:\n");
+    print_constants();
+};
+
+void test_prints_constants(void) {
+    int line_count = 0;
+    char** lines = capture_stdout_lines(run_constants_command, NULL, &line_count);
+
+    const char* expected[] = {
+        "Constants:",
+        "ROW_SIZE: 293",
+        "COMMON_NODE_HEADER_SIZE: 6",
+        "LEAF_NODE_HEADER_SIZE: 10",
+        "LEAF_NODE_CELL_SIZE: 297",
+        "LEAF_NODE_SPACE_FOR_CELLS: 4086",
+        "LEAF_NODE_MAX_CELLS: 13",
+    };
+    int expected_count = sizeof(expected) / sizeof(expected[0]);
+
+    TEST_ASSERT_EQUAL(expected_count, line_count);
+    for (int i = 0; i < expected_count && i < line_count; i++) {
+        TEST_ASSERT_EQUAL_STRING(expected[i], lines[i]);
+    }
+
+    free_captured_lines(lines, line_count);
+};
+
+static void run_btree_command(void* arg) {
+    Table* table = (Table*)arg;
+
+    int ids[] = {3, 1, 2};
+    Statement statement;
+    statement.type = STATEMENT_INSERT;
+
+    for (int i = 0; i < 3; i++) {
+        statement.row_to_insert.id = ids[i];
+
+        snprintf(
+            statement.row_to_insert.username,
+            sizeof(statement.row_to_insert.username),
+            "user%d",
+            ids[i]
+        );
+
+        snprintf(
+            statement.row_to_insert.email,
+            sizeof(statement.row_to_insert.email),
+            "person%d@example.com",
+            ids[i]
+        );
+
+        execute_insert(&statement, table);
+    }
+
+    printf("Tree:\n");
+    print_leaf_node(get_page(table->pager, 0));
+};
+
+void test_prints_one_node_btree_structure(void) {
+    char db_path[] = "/tmp/db_test_btree_XXXXXX";
+    int fd = mkstemp(db_path);
+    TEST_ASSERT_TRUE(fd != -1);
+    close(fd);
+
+    Table* table = db_open(db_path);
+
+    int line_count = 0;
+    char** lines = capture_stdout_lines(run_btree_command, table, &line_count);
+
+    const char* expected[] = {
+        "Tree:",
+        "leaf (size 3)",
+        "  - 0 : 3",
+        "  - 1 : 1",
+        "  - 2 : 2",
+    };
+    int expected_count = sizeof(expected) / sizeof(expected[0]);
+
+    TEST_ASSERT_EQUAL(expected_count, line_count);
+    for (int i = 0; i < expected_count && i < line_count; i++) {
+        TEST_ASSERT_EQUAL_STRING(expected[i], lines[i]);
+    }
+
+    free_captured_lines(lines, line_count);
+    db_close(table);
+    remove(db_path);
 };
 
 int main(void) {
@@ -188,5 +338,7 @@ int main(void) {
     RUN_TEST(test_email_too_long);
     RUN_TEST(test_table_full);
     RUN_TEST(test_negative_id);
+    RUN_TEST(test_prints_constants);
+    RUN_TEST(test_prints_one_node_btree_structure);
     return UNITY_END();
 };
