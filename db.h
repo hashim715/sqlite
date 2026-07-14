@@ -1,6 +1,7 @@
 #ifndef DB_H
 #define DB_H
 
+#include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -21,8 +22,6 @@
 #define ROW_SIZE (ID_SIZE + USERNAME_SIZE + EMAIL_SIZE)
 
 #define PAGE_SIZE 4096
-#define ROWS_PER_PAGE (PAGE_SIZE / ROW_SIZE)
-#define TABLE_MAX_ROWS (TABLE_MAX_PAGES * ROWS_PER_PAGE)
 
 /*
  * Common Node Header Layout
@@ -69,17 +68,19 @@ typedef enum {
 typedef struct {
     int file_descriptor;
     uint32_t file_length;
+    uint32_t num_pages;
     void* pages[TABLE_MAX_PAGES];
 } Pager;
 
 typedef struct {
-    uint32_t num_rows;
+    uint32_t root_page_num;
     Pager* pager;
 } Table;
 
 typedef struct {
     Table* table;
-    uint32_t row_num;
+    uint32_t page_num;
+    uint32_t cell_num;
     bool end_of_table; // Indicates a position one past the last element
 } Cursor;
 
@@ -144,7 +145,7 @@ void cursor_advance(Cursor* cursor);
 
 void db_close(Table* table);
 
-void pager_flush(Pager* pager, uint32_t page_num, uint32_t size);
+void pager_flush(Pager* pager, uint32_t page_num);
 
 void print_row(Row* row);
 
@@ -161,5 +162,11 @@ uint32_t* leaf_node_key(void* node, uint32_t cell_num);
 void* leaf_node_value(void* node, uint32_t cell_num);
 
 void initialize_leaf_node(void* node);
+
+void leaf_node_insert(Cursor* cursor, uint32_t key, Row* value);
+
+void print_constants();
+
+void print_leaf_node(void* node);
 
 #endif
