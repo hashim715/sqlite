@@ -110,7 +110,8 @@ typedef enum {
 
 typedef enum {
     EXECUTE_SUCCESS,
-    EXECUTE_TABLE_FULL
+    EXECUTE_TABLE_FULL,
+    EXECUTE_DUPLICATE_KEY
 } ExecuteResult;
 
 typedef struct {
@@ -139,11 +140,19 @@ Cursor* table_start(Table* table);
 
 Cursor* table_end(Table* table);
 
+Cursor* table_find(Table* table, uint32_t key);
+
 void* cursor_value(Cursor* cursor);
 
 void cursor_advance(Cursor* cursor);
 
 void db_close(Table* table);
+
+NodeType get_node_type(void* node);
+
+void set_node_type(void* node, NodeType type);
+
+Cursor* leaf_node_find(Table* table, uint32_t page_num, uint32_t key);
 
 void pager_flush(Pager* pager, uint32_t page_num);
 
