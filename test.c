@@ -268,6 +268,30 @@ void test_prints_constants(void) {
     free_captured_lines(lines, line_count);
 };
 
+void test_duplicate_key(void) {
+    char db_path[] = "/tmp/db_test_duplicate_key_XXXXXX";
+    int fd = mkstemp(db_path);
+    TEST_ASSERT_TRUE(fd != -1);
+    close(fd);
+
+    Table* table = db_open(db_path);
+
+    Statement statement;
+    statement.type = STATEMENT_INSERT;
+    statement.row_to_insert.id = 1;
+    strcpy(statement.row_to_insert.username, "user1");
+    strcpy(statement.row_to_insert.email, "person1@example.com");
+
+    ExecuteResult first_result = execute_insert(&statement, table);
+    ExecuteResult second_result = execute_insert(&statement, table);
+
+    TEST_ASSERT_EQUAL(EXECUTE_SUCCESS, first_result);
+    TEST_ASSERT_EQUAL(EXECUTE_DUPLICATE_KEY, second_result);
+
+    db_close(table);
+    remove(db_path);
+};
+
 static void run_btree_command(void* arg) {
     Table* table = (Table*)arg;
 
@@ -313,9 +337,9 @@ void test_prints_one_node_btree_structure(void) {
     const char* expected[] = {
         "Tree:",
         "leaf (size 3)",
-        "  - 0 : 3",
-        "  - 1 : 1",
-        "  - 2 : 2",
+        "  - 0 : 1",
+        "  - 1 : 2",
+        "  - 2 : 3",
     };
     int expected_count = sizeof(expected) / sizeof(expected[0]);
 
@@ -338,6 +362,7 @@ int main(void) {
     RUN_TEST(test_email_too_long);
     RUN_TEST(test_table_full);
     RUN_TEST(test_negative_id);
+    RUN_TEST(test_duplicate_key);
     RUN_TEST(test_prints_constants);
     RUN_TEST(test_prints_one_node_btree_structure);
     return UNITY_END();
