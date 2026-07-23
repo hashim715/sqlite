@@ -1,4 +1,5 @@
 #include <unistd.h>
+#include <sys/wait.h>
 #include "Unity/src/unity.h"
 #include "db.h"
 
@@ -56,6 +57,56 @@ static void free_captured_lines(char** lines, int line_count) {
         free(lines[i]);
     }
     free(lines);
+};
+
+// Like capture_stdout_lines, but runs `action` in a forked child process.
+// Needed when `action` may call exit() itself (e.g. hitting an
+// unimplemented code path), which would otherwise abort the whole
+// test binary instead of just that one scenario.
+static char** capture_stdout_lines_forked(void (*action)(void*), void* arg, int* out_line_count) {
+    char temp_path[] = "/tmp/db_test_stdout_XXXXXX";
+    int temp_fd = mkstemp(temp_path);
+    TEST_ASSERT_TRUE(temp_fd != -1);
+
+    fflush(stdout);
+    pid_t pid = fork();
+    TEST_ASSERT_TRUE(pid != -1);
+
+    if (pid == 0) {
+        dup2(temp_fd, STDOUT_FILENO);
+        close(temp_fd);
+        action(arg);
+        fflush(stdout);
+        _exit(0);
+    }
+
+    close(temp_fd);
+    int status;
+    waitpid(pid, &status, 0);
+
+    FILE* capture_fp = fopen(temp_path, "r");
+    TEST_ASSERT_NOT_NULL(capture_fp);
+
+    char** lines = NULL;
+    int line_count = 0;
+    char line_buf[1024];
+
+    while (fgets(line_buf, sizeof(line_buf), capture_fp) != NULL) {
+        size_t len = strlen(line_buf);
+        if (len > 0 && line_buf[len - 1] == '\n') {
+            line_buf[len - 1] = '\0';
+        }
+
+        lines = (char**)realloc(lines, sizeof(char*) * (line_count + 1));
+        lines[line_count] = strdup(line_buf);
+        line_count++;
+    }
+
+    fclose(capture_fp);
+    remove(temp_path);
+
+    *out_line_count = line_count;
+    return lines;
 };
 
 void test_row_id(void) {
@@ -231,7 +282,7 @@ void test_table_full(void) {
     }
 
     TEST_ASSERT_EQUAL(
-        EXECUTE_TABLE_FULL,
+        EXECUTE_SUCCESS,
         result
     );
 
@@ -320,7 +371,7 @@ static void run_btree_command(void* arg) {
     }
 
     printf("Tree:\n");
-    print_leaf_node(get_page(table->pager, 0));
+    print_tree(table->pager, 0, 0);
 };
 
 void test_prints_one_node_btree_structure(void) {
@@ -336,10 +387,10 @@ void test_prints_one_node_btree_structure(void) {
 
     const char* expected[] = {
         "Tree:",
-        "leaf (size 3)",
-        "  - 0 : 1",
-        "  - 1 : 2",
-        "  - 2 : 3",
+        "- leaf (size 3)",
+        "  - 1",
+        "  - 2",
+        "  - 3",
     };
     int expected_count = sizeof(expected) / sizeof(expected[0]);
 
@@ -350,6 +401,86 @@ void test_prints_one_node_btree_structure(void) {
 
     free_captured_lines(lines, line_count);
     db_close(table);
+    remove(db_path);
+};
+
+static void run_three_leaf_node_btree_command(void* arg) {
+    char* db_path = (char*)arg;
+    Table* table = db_open(db_path);
+
+    Statement statement;
+    statement.type = STATEMENT_INSERT;
+
+    for (int i = 1; i <= 14; i++) {
+        statement.row_to_insert.id = i;
+
+        snprintf(
+            statement.row_to_insert.username,
+            sizeof(statement.row_to_insert.username),
+            "user%d",
+            i
+        );
+
+        snprintf(
+            statement.row_to_insert.email,
+            sizeof(statement.row_to_insert.email),
+            "person%d@example.com",
+            i
+        );
+
+        execute_insert(&statement, table);
+    }
+
+    printf("Tree:\n");
+    print_tree(table->pager, 0, 0);
+
+    statement.row_to_insert.id = 15;
+    snprintf(statement.row_to_insert.username, sizeof(statement.row_to_insert.username), "user15");
+    snprintf(statement.row_to_insert.email, sizeof(statement.row_to_insert.email), "person15@example.com");
+    execute_insert(&statement, table);
+
+    db_close(table);
+};
+
+void test_prints_three_leaf_node_btree_structure(void) {
+    char db_path[] = "/tmp/db_test_btree3_XXXXXX";
+    int fd = mkstemp(db_path);
+    TEST_ASSERT_TRUE(fd != -1);
+    close(fd);
+
+    int line_count = 0;
+    char** lines = capture_stdout_lines_forked(run_three_leaf_node_btree_command, db_path, &line_count);
+
+    const char* expected[] = {
+        "Tree:",
+        "- internal (size 1)",
+        "  - leaf (size 7)",
+        "    - 1",
+        "    - 2",
+        "    - 3",
+        "    - 4",
+        "    - 5",
+        "    - 6",
+        "    - 7",
+        "  - key 7",
+        "  - leaf (size 7)",
+        "    - 8",
+        "    - 9",
+        "    - 10",
+        "    - 11",
+        "    - 12",
+        "    - 13",
+        "    - 14",
+        "Need to implement searching an internal node",
+    };
+    int expected_count = sizeof(expected) / sizeof(expected[0]);
+
+    TEST_ASSERT_EQUAL(expected_count, line_count);
+    for (int i = 0; i < expected_count && i < line_count; i++) {
+        TEST_ASSERT_EQUAL_STRING(expected[i], lines[i]);
+    }
+
+    free_captured_lines(lines, line_count);
     remove(db_path);
 };
 
@@ -365,5 +496,6 @@ int main(void) {
     RUN_TEST(test_duplicate_key);
     RUN_TEST(test_prints_constants);
     RUN_TEST(test_prints_one_node_btree_structure);
+    RUN_TEST(test_prints_three_leaf_node_btree_structure);
     return UNITY_END();
 };
