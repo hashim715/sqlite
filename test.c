@@ -303,11 +303,18 @@ void test_prints_constants(void) {
     const char* expected[] = {
         "Constants:",
         "ROW_SIZE: 293",
+        "PAGE_SIZE: 4096",
         "COMMON_NODE_HEADER_SIZE: 6",
         "LEAF_NODE_HEADER_SIZE: 10",
         "LEAF_NODE_CELL_SIZE: 297",
         "LEAF_NODE_SPACE_FOR_CELLS: 4086",
         "LEAF_NODE_MAX_CELLS: 13",
+        "LEAF_NODE_LEFT_SPLIT_COUNT: 7",
+        "LEAF_NODE_RIGHT_SPLIT_COUNT: 7",
+        "INTERNAL_NODE_HEADER_SIZE: 14",
+        "INTERNAL_NODE_CELL_SIZE: 8",
+        "INTERNAL_NODE_SPACE_FOR_CELLS: 4082",
+        "INTERNAL_NODE_MAX_CELLS: 510",
     };
     int expected_count = sizeof(expected) / sizeof(expected[0]);
 
@@ -439,6 +446,9 @@ static void run_three_leaf_node_btree_command(void* arg) {
     snprintf(statement.row_to_insert.email, sizeof(statement.row_to_insert.email), "person15@example.com");
     execute_insert(&statement, table);
 
+    printf("Tree:\n");
+    print_tree(table->pager, 0, 0);
+
     db_close(table);
 };
 
@@ -471,7 +481,26 @@ void test_prints_three_leaf_node_btree_structure(void) {
         "    - 12",
         "    - 13",
         "    - 14",
-        "Need to implement searching an internal node",
+        "Tree:",
+        "- internal (size 1)",
+        "  - leaf (size 7)",
+        "    - 1",
+        "    - 2",
+        "    - 3",
+        "    - 4",
+        "    - 5",
+        "    - 6",
+        "    - 7",
+        "  - key 7",
+        "  - leaf (size 8)",
+        "    - 8",
+        "    - 9",
+        "    - 10",
+        "    - 11",
+        "    - 12",
+        "    - 13",
+        "    - 14",
+        "    - 15",
     };
     int expected_count = sizeof(expected) / sizeof(expected[0]);
 
@@ -479,6 +508,59 @@ void test_prints_three_leaf_node_btree_structure(void) {
     for (int i = 0; i < expected_count && i < line_count; i++) {
         TEST_ASSERT_EQUAL_STRING(expected[i], lines[i]);
     }
+
+    free_captured_lines(lines, line_count);
+    remove(db_path);
+};
+
+static void run_many_rows_command(void* arg) {
+    char* db_path = (char*)arg;
+    Table* table = db_open(db_path);
+
+    Statement statement;
+    statement.type = STATEMENT_INSERT;
+
+    for (int i = 1; i <= 1400; i++) {
+        statement.row_to_insert.id = i;
+
+        snprintf(
+            statement.row_to_insert.username,
+            sizeof(statement.row_to_insert.username),
+            "user%d",
+            i
+        );
+
+        snprintf(
+            statement.row_to_insert.email,
+            sizeof(statement.row_to_insert.email),
+            "person%d@example.com",
+            i
+        );
+
+        ExecuteResult result = execute_insert(&statement, table);
+        if (result == EXECUTE_SUCCESS) {
+            printf("Executed.\n");
+        }
+    }
+
+    db_close(table);
+};
+
+void test_many_rows_needs_parent_update(void) {
+    char db_path[] = "/tmp/db_test_many_rows_XXXXXX";
+    int fd = mkstemp(db_path);
+    TEST_ASSERT_TRUE(fd != -1);
+    close(fd);
+
+    int line_count = 0;
+    char** lines = capture_stdout_lines_forked(run_many_rows_command, db_path, &line_count);
+
+    TEST_ASSERT_TRUE(line_count >= 2);
+    const char* last = lines[line_count - 1];
+    const char* second_to_last = lines[line_count - 2];
+
+    TEST_ASSERT_EQUAL_STRING("Executed.", second_to_last);
+    TEST_ASSERT_EQUAL_STRING("Need to implement updating parent after split", last);
 
     free_captured_lines(lines, line_count);
     remove(db_path);
@@ -497,5 +579,6 @@ int main(void) {
     RUN_TEST(test_prints_constants);
     RUN_TEST(test_prints_one_node_btree_structure);
     RUN_TEST(test_prints_three_leaf_node_btree_structure);
+    RUN_TEST(test_many_rows_needs_parent_update);
     return UNITY_END();
 };

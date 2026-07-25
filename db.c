@@ -233,6 +233,35 @@ Cursor* table_end(Table* table) {
     return cursor;
 };
 
+Cursor* internal_node_find(Table* table, uint32_t page_num, uint32_t key) {
+    void* node = get_page(table->pager, page_num);
+    uint32_t num_keys = *internal_node_num_keys(node);
+
+    /* Binary search to find index of child to search */
+    uint32_t min_index = 0;
+    uint32_t max_index = num_keys; /* there is one more child than key */
+
+    while (min_index != max_index) {
+        uint32_t mid_index = (min_index + max_index) / 2;
+        uint32_t key_to_right = *internal_node_key(node, mid_index);
+
+        if (key_to_right >= key) {
+            max_index = mid_index;
+        } else {
+            min_index = mid_index + 1;
+        };
+    };
+
+    uint32_t child_num = *internal_node_child(node, min_index);
+    void* child = get_page(table->pager, child_num);
+    switch(get_node_type(child)) {
+        case NODE_LEAF:
+            return leaf_node_find(table, child_num, key);
+        case NODE_INTERNAL:
+            return internal_node_find(table, child_num, key);
+    };
+};
+
 Cursor* table_find(Table* table, uint32_t key) {
     uint32_t root_page_num = table->root_page_num;
     void* root_node = get_page(table->pager, root_page_num);
@@ -240,8 +269,7 @@ Cursor* table_find(Table* table, uint32_t key) {
     if (get_node_type(root_node) == NODE_LEAF) {
         return leaf_node_find(table, root_page_num, key);
     } else {
-        printf("Need to implement searching an internal node\n");
-        exit(EXIT_FAILURE);
+        return internal_node_find(table, root_page_num, key);
     };
 };
 
@@ -516,16 +544,17 @@ void pager_flush(Pager* pager, uint32_t page_num) {
 };
 
 ExecuteResult execute_insert(Statement* statement, Table* table) {
-    void* node = get_page(table->pager, table->root_page_num);
-    uint32_t num_cells = *(leaf_node_num_cells(node));
-
     Row* row_to_insert = &(statement->row_to_insert);
     uint32_t key_to_insert = row_to_insert->id;
     Cursor *cursor = table_find(table, key_to_insert);
 
+    void* node = get_page(table->pager, cursor->page_num);
+    uint32_t num_cells = *(leaf_node_num_cells(node));
+
     if (cursor->cell_num < num_cells) {
         uint32_t key_at_index = *leaf_node_key(node, cursor->cell_num);
         if (key_at_index == key_to_insert) {
+            free(cursor);
             return EXECUTE_DUPLICATE_KEY;
         };
     };
@@ -606,11 +635,20 @@ void leaf_node_insert(Cursor* cursor, uint32_t key, Row* value) {
 
 void print_constants() {
     printf("ROW_SIZE: %lu\n", ROW_SIZE);
+    printf("PAGE_SIZE: %lu\n", (unsigned long)PAGE_SIZE);
     printf("COMMON_NODE_HEADER_SIZE: %lu\n", COMMON_NODE_HEADER_SIZE);
+
     printf("LEAF_NODE_HEADER_SIZE: %lu\n", LEAF_NODE_HEADER_SIZE);
     printf("LEAF_NODE_CELL_SIZE: %lu\n", LEAF_NODE_CELL_SIZE);
     printf("LEAF_NODE_SPACE_FOR_CELLS: %lu\n", LEAF_NODE_SPACE_FOR_CELLS);
     printf("LEAF_NODE_MAX_CELLS: %lu\n", LEAF_NODE_MAX_CELLS);
+    printf("LEAF_NODE_LEFT_SPLIT_COUNT: %lu\n", LEAF_NODE_LEFT_SPLIT_COUNT);
+    printf("LEAF_NODE_RIGHT_SPLIT_COUNT: %lu\n", LEAF_NODE_RIGHT_SPLIT_COUNT);
+
+    printf("INTERNAL_NODE_HEADER_SIZE: %lu\n", INTERNAL_NODE_HEADER_SIZE);
+    printf("INTERNAL_NODE_CELL_SIZE: %lu\n", INTERNAL_NODE_CELL_SIZE);
+    printf("INTERNAL_NODE_SPACE_FOR_CELLS: %lu\n", INTERNAL_NODE_SPACE_FOR_CELLS);
+    printf("INTERNAL_NODE_MAX_CELLS: %lu\n", INTERNAL_NODE_MAX_CELLS);
 };
 
 Pager* page_open(const char* filename) {

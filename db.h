@@ -77,6 +77,8 @@ Internal Node Body Layout
 #define INTERNAL_NODE_KEY_SIZE sizeof(uint32_t)
 #define INTERNAL_NODE_CHILD_SIZE sizeof(uint32_t)
 #define INTERNAL_NODE_CELL_SIZE (INTERNAL_NODE_CHILD_SIZE + INTERNAL_NODE_KEY_SIZE)
+#define INTERNAL_NODE_SPACE_FOR_CELLS (PAGE_SIZE - INTERNAL_NODE_HEADER_SIZE)
+#define INTERNAL_NODE_MAX_CELLS (INTERNAL_NODE_SPACE_FOR_CELLS / INTERNAL_NODE_CELL_SIZE)
 
 
 typedef struct {
@@ -166,6 +168,8 @@ Cursor* table_start(Table* table);
 Cursor* table_end(Table* table);
 
 Cursor* table_find(Table* table, uint32_t key);
+
+Cursor* internal_node_find(Table* table, uint32_t root_page_num, uint32_t key);
 
 void* cursor_value(Cursor* cursor);
 
