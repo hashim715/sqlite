@@ -40,7 +40,10 @@
 */
 #define LEAF_NODE_NUM_CELLS_SIZE   sizeof(uint32_t)
 #define LEAF_NODE_NUM_CELLS_OFFSET COMMON_NODE_HEADER_SIZE
-#define LEAF_NODE_HEADER_SIZE      (COMMON_NODE_HEADER_SIZE + LEAF_NODE_NUM_CELLS_SIZE)
+#define LEAF_NODE_NEXT_LEAF_SIZE  sizeof(uint32_t)
+#define LEAF_NODE_NEXT_LEAF_OFFSET \
+    (LEAF_NODE_NUM_CELLS_OFFSET + LEAF_NODE_NUM_CELLS_SIZE)
+#define LEAF_NODE_HEADER_SIZE  (COMMON_NODE_HEADER_SIZE + LEAF_NODE_NUM_CELLS_SIZE + LEAF_NODE_NEXT_LEAF_SIZE)
 
 /*
 * Leaf Node Body Layout
@@ -161,6 +164,8 @@ ExecuteResult execute_statement(Statement* statement, Table* table);
 
 ExecuteResult execute_insert(Statement* statement, Table* table);
 
+ExecuteResult execute_select(Statement* statement, Table* table);
+
 Table* db_open(const char* filename);
 
 Cursor* table_start(Table* table);
@@ -208,6 +213,8 @@ uint32_t* internal_node_child(void* node, uint32_t child_num);
 uint32_t* internal_node_key(void* node, uint32_t key_num);
 
 uint32_t get_node_max_key(void* node);
+
+uint32_t* leaf_node_next_leaf(void* node);
 
 void initialize_internal_node(void* node);
 

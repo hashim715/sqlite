@@ -305,9 +305,9 @@ void test_prints_constants(void) {
         "ROW_SIZE: 293",
         "PAGE_SIZE: 4096",
         "COMMON_NODE_HEADER_SIZE: 6",
-        "LEAF_NODE_HEADER_SIZE: 10",
+        "LEAF_NODE_HEADER_SIZE: 14",
         "LEAF_NODE_CELL_SIZE: 297",
-        "LEAF_NODE_SPACE_FOR_CELLS: 4086",
+        "LEAF_NODE_SPACE_FOR_CELLS: 4082",
         "LEAF_NODE_MAX_CELLS: 13",
         "LEAF_NODE_LEFT_SPLIT_COUNT: 7",
         "LEAF_NODE_RIGHT_SPLIT_COUNT: 7",
@@ -566,6 +566,75 @@ void test_many_rows_needs_parent_update(void) {
     remove(db_path);
 };
 
+static void run_select_multi_level_tree_command(void* arg) {
+    char* db_path = (char*)arg;
+    Table* table = db_open(db_path);
+
+    Statement statement;
+    statement.type = STATEMENT_INSERT;
+
+    for (int i = 1; i <= 15; i++) {
+        statement.row_to_insert.id = i;
+
+        snprintf(
+            statement.row_to_insert.username,
+            sizeof(statement.row_to_insert.username),
+            "user%d",
+            i
+        );
+
+        snprintf(
+            statement.row_to_insert.email,
+            sizeof(statement.row_to_insert.email),
+            "person%d@example.com",
+            i
+        );
+
+        execute_insert(&statement, table);
+    }
+
+    execute_select(&statement, table);
+
+    db_close(table);
+};
+
+void test_prints_all_rows_in_multi_level_tree(void) {
+    char db_path[] = "/tmp/db_test_select_multi_XXXXXX";
+    int fd = mkstemp(db_path);
+    TEST_ASSERT_TRUE(fd != -1);
+    close(fd);
+
+    int line_count = 0;
+    char** lines = capture_stdout_lines_forked(run_select_multi_level_tree_command, db_path, &line_count);
+
+    const char* expected[] = {
+        "(1, user1, person1@example.com)",
+        "(2, user2, person2@example.com)",
+        "(3, user3, person3@example.com)",
+        "(4, user4, person4@example.com)",
+        "(5, user5, person5@example.com)",
+        "(6, user6, person6@example.com)",
+        "(7, user7, person7@example.com)",
+        "(8, user8, person8@example.com)",
+        "(9, user9, person9@example.com)",
+        "(10, user10, person10@example.com)",
+        "(11, user11, person11@example.com)",
+        "(12, user12, person12@example.com)",
+        "(13, user13, person13@example.com)",
+        "(14, user14, person14@example.com)",
+        "(15, user15, person15@example.com)",
+    };
+    int expected_count = sizeof(expected) / sizeof(expected[0]);
+
+    TEST_ASSERT_EQUAL(expected_count, line_count);
+    for (int i = 0; i < expected_count && i < line_count; i++) {
+        TEST_ASSERT_EQUAL_STRING(expected[i], lines[i]);
+    }
+
+    free_captured_lines(lines, line_count);
+    remove(db_path);
+};
+
 int main(void) {
     UNITY_BEGIN();
     RUN_TEST(test_row_id);
@@ -580,5 +649,6 @@ int main(void) {
     RUN_TEST(test_prints_one_node_btree_structure);
     RUN_TEST(test_prints_three_leaf_node_btree_structure);
     RUN_TEST(test_many_rows_needs_parent_update);
+    RUN_TEST(test_prints_all_rows_in_multi_level_tree);
     return UNITY_END();
 };
