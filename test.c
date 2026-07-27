@@ -314,7 +314,7 @@ void test_prints_constants(void) {
         "INTERNAL_NODE_HEADER_SIZE: 14",
         "INTERNAL_NODE_CELL_SIZE: 8",
         "INTERNAL_NODE_SPACE_FOR_CELLS: 4082",
-        "INTERNAL_NODE_MAX_CELLS: 510",
+        "INTERNAL_NODE_MAX_CELLS: 3",
     };
     int expected_count = sizeof(expected) / sizeof(expected[0]);
 
@@ -513,6 +513,107 @@ void test_prints_three_leaf_node_btree_structure(void) {
     remove(db_path);
 };
 
+static void run_four_leaf_node_btree_command(void* arg) {
+    char* db_path = (char*)arg;
+    Table* table = db_open(db_path);
+
+    int ids[] = {
+        18, 7, 10, 29, 23, 4, 14, 30, 15, 26,
+        22, 19, 2, 1, 21, 11, 6, 20, 5, 8,
+        9, 3, 12, 27, 17, 16, 13, 24, 25, 28
+    };
+    int num_ids = sizeof(ids) / sizeof(ids[0]);
+
+    Statement statement;
+    statement.type = STATEMENT_INSERT;
+
+    for (int i = 0; i < num_ids; i++) {
+        statement.row_to_insert.id = ids[i];
+
+        snprintf(
+            statement.row_to_insert.username,
+            sizeof(statement.row_to_insert.username),
+            "user%d",
+            ids[i]
+        );
+
+        snprintf(
+            statement.row_to_insert.email,
+            sizeof(statement.row_to_insert.email),
+            "person%d@example.com",
+            ids[i]
+        );
+
+        execute_insert(&statement, table);
+    }
+
+    printf("Tree:\n");
+    print_tree(table->pager, 0, 0);
+
+    db_close(table);
+};
+
+void test_prints_four_leaf_node_btree_structure(void) {
+    char db_path[] = "/tmp/db_test_btree4_XXXXXX";
+    int fd = mkstemp(db_path);
+    TEST_ASSERT_TRUE(fd != -1);
+    close(fd);
+
+    int line_count = 0;
+    char** lines = capture_stdout_lines_forked(run_four_leaf_node_btree_command, db_path, &line_count);
+
+    const char* expected[] = {
+        "Tree:",
+        "- internal (size 3)",
+        "  - leaf (size 7)",
+        "    - 1",
+        "    - 2",
+        "    - 3",
+        "    - 4",
+        "    - 5",
+        "    - 6",
+        "    - 7",
+        "  - key 7",
+        "  - leaf (size 8)",
+        "    - 8",
+        "    - 9",
+        "    - 10",
+        "    - 11",
+        "    - 12",
+        "    - 13",
+        "    - 14",
+        "    - 15",
+        "  - key 15",
+        "  - leaf (size 7)",
+        "    - 16",
+        "    - 17",
+        "    - 18",
+        "    - 19",
+        "    - 20",
+        "    - 21",
+        "    - 22",
+        "  - key 22",
+        "  - leaf (size 8)",
+        "    - 23",
+        "    - 24",
+        "    - 25",
+        "    - 26",
+        "    - 27",
+        "    - 28",
+        "    - 29",
+        "    - 30",
+    };
+    int expected_count = sizeof(expected) / sizeof(expected[0]);
+
+    TEST_ASSERT_EQUAL(expected_count, line_count);
+    for (int i = 0; i < expected_count && i < line_count; i++) {
+        TEST_ASSERT_EQUAL_STRING(expected[i], lines[i]);
+    }
+
+    free_captured_lines(lines, line_count);
+    remove(db_path);
+};
+
 static void run_many_rows_command(void* arg) {
     char* db_path = (char*)arg;
     Table* table = db_open(db_path);
@@ -560,7 +661,7 @@ void test_many_rows_needs_parent_update(void) {
     const char* second_to_last = lines[line_count - 2];
 
     TEST_ASSERT_EQUAL_STRING("Executed.", second_to_last);
-    TEST_ASSERT_EQUAL_STRING("Need to implement updating parent after split", last);
+    TEST_ASSERT_EQUAL_STRING("Need to implement splitting internal node", last);
 
     free_captured_lines(lines, line_count);
     remove(db_path);
@@ -648,6 +749,7 @@ int main(void) {
     RUN_TEST(test_prints_constants);
     RUN_TEST(test_prints_one_node_btree_structure);
     RUN_TEST(test_prints_three_leaf_node_btree_structure);
+    RUN_TEST(test_prints_four_leaf_node_btree_structure);
     RUN_TEST(test_many_rows_needs_parent_update);
     RUN_TEST(test_prints_all_rows_in_multi_level_tree);
     return UNITY_END();

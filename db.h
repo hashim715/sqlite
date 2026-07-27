@@ -81,7 +81,8 @@ Internal Node Body Layout
 #define INTERNAL_NODE_CHILD_SIZE sizeof(uint32_t)
 #define INTERNAL_NODE_CELL_SIZE (INTERNAL_NODE_CHILD_SIZE + INTERNAL_NODE_KEY_SIZE)
 #define INTERNAL_NODE_SPACE_FOR_CELLS (PAGE_SIZE - INTERNAL_NODE_HEADER_SIZE)
-#define INTERNAL_NODE_MAX_CELLS (INTERNAL_NODE_SPACE_FOR_CELLS / INTERNAL_NODE_CELL_SIZE)
+/* Keep this small for testing */
+#define INTERNAL_NODE_MAX_CELLS 3
 
 
 typedef struct {
@@ -214,6 +215,10 @@ uint32_t* internal_node_key(void* node, uint32_t key_num);
 
 uint32_t get_node_max_key(void* node);
 
+uint32_t* node_parent(void* node);
+
+void update_internal_node_key(void* node, uint32_t old_key, uint32_t new_key);
+
 uint32_t* leaf_node_next_leaf(void* node);
 
 void initialize_internal_node(void* node);
@@ -223,6 +228,8 @@ bool is_node_root(void* node);
 void set_node_root(void* node, bool is_root);
 
 void create_new_root(Table* table, uint32_t right_child_page_num);
+
+void internal_node_insert(Table* table, uint32_t parent_page_num, uint32_t child_page_num);
 
 void* leaf_node_value(void* node, uint32_t cell_num);
 
