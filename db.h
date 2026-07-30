@@ -84,6 +84,7 @@ Internal Node Body Layout
 /* Keep this small for testing */
 #define INTERNAL_NODE_MAX_CELLS 3
 
+#define INVALID_PAGE_NUM UINT32_MAX
 
 typedef struct {
     char* buffer;
@@ -157,7 +158,11 @@ void print_prompt();
 
 void read_input(InputBuffer* input_buffer);
 
+void close_input(InputBuffer* input_buffer);
+
 MetaCommandResult do_meta_command(InputBuffer* input_buffer, Table* table);
+
+PrepareResult prepare_insert(InputBuffer* input_buffer, Statement* statement);
 
 PrepareResult prepare_statement(InputBuffer* input_buffer, Statement* statement);
 
@@ -213,7 +218,7 @@ uint32_t* internal_node_child(void* node, uint32_t child_num);
 
 uint32_t* internal_node_key(void* node, uint32_t key_num);
 
-uint32_t get_node_max_key(void* node);
+uint32_t get_node_max_key(Pager* pager, void* node);
 
 uint32_t* node_parent(void* node);
 
@@ -237,6 +242,8 @@ void initialize_leaf_node(void* node);
 
 void leaf_node_split_and_insert(Cursor* cursor, uint32_t key, Row* value);
 
+void internal_node_split_and_insert(Table* table, uint32_t parent_page_num, uint32_t child_page_num);
+
 uint32_t get_unused_page_num(Pager* pager);
 
 void leaf_node_insert(Cursor* cursor, uint32_t key, Row* value);
@@ -246,5 +253,11 @@ void print_constants();
 void indent(uint32_t level);
 
 void print_tree(Pager* pager, uint32_t page_num, uint32_t indentation_level);
+
+void serialize_row(Row* source, void* destination);
+
+void deserialize_row(void* source, Row* destination);
+
+uint32_t internal_node_find_child(void* node, uint32_t key);
 
 #endif

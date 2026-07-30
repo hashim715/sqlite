@@ -614,6 +614,153 @@ void test_prints_four_leaf_node_btree_structure(void) {
     remove(db_path);
 };
 
+static void run_seven_leaf_node_btree_command(void* arg) {
+    char* db_path = (char*)arg;
+    Table* table = db_open(db_path);
+
+    int ids[] = {
+        58, 56, 8, 54, 77, 7, 25, 71, 13, 22,
+        53, 51, 59, 32, 36, 79, 10, 33, 20, 4,
+        35, 76, 49, 24, 70, 48, 39, 15, 47, 30,
+        86, 31, 68, 37, 66, 63, 40, 78, 19, 46,
+        14, 81, 72, 6, 50, 85, 67, 2, 55, 69,
+        5, 65, 52, 1, 29, 9, 43, 75, 21, 82,
+        12, 18, 60, 44
+    };
+    int num_ids = sizeof(ids) / sizeof(ids[0]);
+
+    Statement statement;
+    statement.type = STATEMENT_INSERT;
+
+    for (int i = 0; i < num_ids; i++) {
+        statement.row_to_insert.id = ids[i];
+
+        snprintf(
+            statement.row_to_insert.username,
+            sizeof(statement.row_to_insert.username),
+            "user%d",
+            ids[i]
+        );
+
+        snprintf(
+            statement.row_to_insert.email,
+            sizeof(statement.row_to_insert.email),
+            "person%d@example.com",
+            ids[i]
+        );
+
+        execute_insert(&statement, table);
+    }
+
+    printf("Tree:\n");
+    print_tree(table->pager, 0, 0);
+
+    db_close(table);
+};
+
+void test_prints_seven_leaf_node_btree_structure(void) {
+    char db_path[] = "/tmp/db_test_btree7_XXXXXX";
+    int fd = mkstemp(db_path);
+    TEST_ASSERT_TRUE(fd != -1);
+    close(fd);
+
+    int line_count = 0;
+    char** lines = capture_stdout_lines_forked(run_seven_leaf_node_btree_command, db_path, &line_count);
+
+    const char* expected[] = {
+        "Tree:",
+        "- internal (size 1)",
+        "  - internal (size 2)",
+        "    - leaf (size 7)",
+        "      - 1",
+        "      - 2",
+        "      - 4",
+        "      - 5",
+        "      - 6",
+        "      - 7",
+        "      - 8",
+        "    - key 8",
+        "    - leaf (size 11)",
+        "      - 9",
+        "      - 10",
+        "      - 12",
+        "      - 13",
+        "      - 14",
+        "      - 15",
+        "      - 18",
+        "      - 19",
+        "      - 20",
+        "      - 21",
+        "      - 22",
+        "    - key 22",
+        "    - leaf (size 8)",
+        "      - 24",
+        "      - 25",
+        "      - 29",
+        "      - 30",
+        "      - 31",
+        "      - 32",
+        "      - 33",
+        "      - 35",
+        "  - key 35",
+        "  - internal (size 3)",
+        "    - leaf (size 12)",
+        "      - 36",
+        "      - 37",
+        "      - 39",
+        "      - 40",
+        "      - 43",
+        "      - 44",
+        "      - 46",
+        "      - 47",
+        "      - 48",
+        "      - 49",
+        "      - 50",
+        "      - 51",
+        "    - key 51",
+        "    - leaf (size 11)",
+        "      - 52",
+        "      - 53",
+        "      - 54",
+        "      - 55",
+        "      - 56",
+        "      - 58",
+        "      - 59",
+        "      - 60",
+        "      - 63",
+        "      - 65",
+        "      - 66",
+        "    - key 66",
+        "    - leaf (size 7)",
+        "      - 67",
+        "      - 68",
+        "      - 69",
+        "      - 70",
+        "      - 71",
+        "      - 72",
+        "      - 75",
+        "    - key 75",
+        "    - leaf (size 8)",
+        "      - 76",
+        "      - 77",
+        "      - 78",
+        "      - 79",
+        "      - 81",
+        "      - 82",
+        "      - 85",
+        "      - 86",
+    };
+    int expected_count = sizeof(expected) / sizeof(expected[0]);
+
+    TEST_ASSERT_EQUAL(expected_count, line_count);
+    for (int i = 0; i < expected_count && i < line_count; i++) {
+        TEST_ASSERT_EQUAL_STRING(expected[i], lines[i]);
+    }
+
+    free_captured_lines(lines, line_count);
+    remove(db_path);
+};
+
 static void run_many_rows_command(void* arg) {
     char* db_path = (char*)arg;
     Table* table = db_open(db_path);
@@ -750,6 +897,7 @@ int main(void) {
     RUN_TEST(test_prints_one_node_btree_structure);
     RUN_TEST(test_prints_three_leaf_node_btree_structure);
     RUN_TEST(test_prints_four_leaf_node_btree_structure);
+    RUN_TEST(test_prints_seven_leaf_node_btree_structure);
     RUN_TEST(test_many_rows_needs_parent_update);
     RUN_TEST(test_prints_all_rows_in_multi_level_tree);
     return UNITY_END();
