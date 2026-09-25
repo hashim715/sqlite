@@ -14,3 +14,5 @@ test
 
 # macOS
 .DS_Store
+
+.vscode

@@ -6,19 +6,27 @@ implements a REPL that accepts a minimal SQL subset, persists rows to disk
 via a paged file layout, and is in the process of growing into a real
 on-disk B-tree.
 
-This is a learning project — currently through **part 7** of the tutorial
-(leaf-node B-tree layout, before internal nodes and node splitting).
+This is a learning project — currently through **part 14** of the tutorial
+(multi-level B-tree with internal node splitting).
 
 ## Features so far
 
-- REPL with meta-commands (`.exit`) and SQL-like statements (`insert`,
-  `select`)
+- REPL with meta-commands (`.exit`, `.btree`, `.constants`) and SQL-like
+  statements (`insert`, `select`)
 - Fixed-width row serialization (`id`, `username`, `email`)
 - A pager that reads/writes 4KB pages to a backing file, with an in-memory
   page cache
 - Cursor abstraction for walking the table
-- On-disk leaf node header/body layout, laying the groundwork for a proper
-  B-tree
+- On-disk leaf node and internal node header/body layout
+- Binary search for key lookup within a node, both for leaf nodes
+  (`leaf_node_find`) and internal nodes (`internal_node_find_child`)
+- Duplicate key rejection on insert
+- Leaf node splitting when a node fills up, growing the tree into an
+  internal root
+- Internal node splitting for multi-level trees, including creating new
+  roots as the tree grows taller
+- Leaf node sibling pointers so `select` can traverse across multiple
+  leaves in order
 
 ## Building
 
@@ -52,7 +60,5 @@ gcc -o test test.c db.c Unity/src/unity.c -IUnity/src
 
 ## Roadmap
 
-- Internal B-tree nodes and node splitting
-- Multi-node trees / tree traversal for `select`
 - `delete` support
-- Cursor-based B-tree search instead of linear scan
+- String/text-typed keys (currently keys are fixed-width `uint32_t` ids)
